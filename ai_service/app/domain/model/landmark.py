@@ -42,6 +42,21 @@ class Point:
         px2, py2 = other.pixel_coords(image_width, image_height)
         return ((px1 - px2) ** 2 + (py1 - py2) ** 2) ** 0.5
 
+    def distance_to_3d(
+        self, other: Point, image_width: int, image_height: int,
+        max_correction: float = 1.3,
+    ) -> float:
+        """z座標を考慮した3D距離。補正係数をmax_correctionでクランプ。"""
+        dist_2d = self.distance_to(other, image_width, image_height)
+        if dist_2d == 0:
+            return 0.0
+        dz_px = (self.z - other.z) * image_width
+        dist_3d = ((dist_2d ** 2) + (dz_px ** 2)) ** 0.5
+        correction = dist_3d / dist_2d
+        if correction > max_correction:
+            dist_3d = dist_2d * max_correction
+        return dist_3d
+
 
 @dataclass(frozen=True)
 class HandLandmarks:
@@ -79,6 +94,15 @@ class HandLandmarks:
             "middle": LandmarkIndex.MIDDLE_FINGER_PIP,
             "ring": LandmarkIndex.RING_FINGER_PIP,
             "pinky": LandmarkIndex.PINKY_PIP,
+        }
+        return self.get(mapping[finger_name])
+
+    def finger_dip(self, finger_name: str) -> Point:
+        mapping = {
+            "index": LandmarkIndex.INDEX_FINGER_DIP,
+            "middle": LandmarkIndex.MIDDLE_FINGER_DIP,
+            "ring": LandmarkIndex.RING_FINGER_DIP,
+            "pinky": LandmarkIndex.PINKY_DIP,
         }
         return self.get(mapping[finger_name])
 

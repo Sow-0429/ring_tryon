@@ -22,6 +22,7 @@ class Scale:
 @dataclass(frozen=True)
 class FingerMeasurement:
     finger_name: str
+    length_mm: float
     width_px: float
     width_mm: float
     ring_position_x: float
@@ -36,15 +37,6 @@ class FingerMeasurement:
 @dataclass(frozen=True)
 class RingSize:
     circumference_mm: float
-
-    DEPTH_TO_WIDTH_RATIO = 0.8
-
-    @classmethod
-    def from_finger_width(cls, width_mm: float) -> RingSize:
-        a = width_mm / 2
-        b = (width_mm * cls.DEPTH_TO_WIDTH_RATIO) / 2
-        circumference = math.pi * (3 * (a + b) - math.sqrt((3 * a + b) * (a + 3 * b)))
-        return cls(circumference_mm=circumference)
 
     @property
     def us_size(self) -> float:
