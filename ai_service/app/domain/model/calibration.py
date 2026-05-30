@@ -15,4 +15,12 @@ class CoinCalibrationInput:
     pass
 
 
-CalibrationInput = Union[FingerCalibrationInput, CoinCalibrationInput]
+@dataclass(frozen=True)
+class CardCalibrationInput:
+    """ISO ID-1カード(クレカ/ICカード)を基準物として使用する入力。"""
+    pass
+
+
+CalibrationInput = Union[
+    FingerCalibrationInput, CoinCalibrationInput, CardCalibrationInput
+]

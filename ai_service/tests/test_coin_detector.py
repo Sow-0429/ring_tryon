@@ -22,6 +22,20 @@ def _make_image_without_circle(width: int = 500, height: int = 500) -> np.ndarra
     return np.ones((height, width, 3), dtype=np.uint8) * 200
 
 
+def _make_image_with_square(
+    width: int = 500,
+    height: int = 500,
+    center: tuple[int, int] = (250, 250),
+    side: int = 80,
+) -> np.ndarray:
+    """白背景に灰色の正方形。円形度が低くコインとして棄却されるべき。"""
+    img = np.ones((height, width, 3), dtype=np.uint8) * 240
+    cx, cy = center
+    half = side // 2
+    cv2.rectangle(img, (cx - half, cy - half), (cx + half, cy + half), (120, 120, 120), -1)
+    return img
+
+
 class TestCoinDetector:
     def test_detect_circle(self):
         image = _make_image_with_circle(radius=40)
@@ -51,3 +65,10 @@ class TestCoinDetector:
         result = detector.detect(image)
         assert result is not None
         assert 0.0 <= result.confidence <= 1.0
+
+    def test_reject_square_low_circularity(self):
+        """正方形は円形度が低くコインとして棄却される。"""
+        image = _make_image_with_square(side=80)
+        detector = CoinDetector()
+        result = detector.detect(image)
+        assert result is None

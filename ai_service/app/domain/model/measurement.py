@@ -28,6 +28,8 @@ class FingerMeasurement:
     ring_position_x: float
     ring_position_y: float
     finger_angle_rad: float
+    base_width_mm: float = 0.0
+    pip_width_mm: float = 0.0
 
     @property
     def finger_angle_deg(self) -> float:

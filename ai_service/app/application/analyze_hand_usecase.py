@@ -6,18 +6,22 @@ import numpy as np
 
 from app.domain.model.calibration import (
     CalibrationInput,
+    CardCalibrationInput,
     CoinCalibrationInput,
     FingerCalibrationInput,
 )
 from app.domain.model.landmark import HandLandmarks
 from app.domain.model.measurement import FingerMeasurement, RingSize, Scale
+from app.domain.service.card_calibrator import CardCalibrator
 from app.domain.service.circumference_estimator import CircumferenceEstimator
 from app.domain.service.coin_calibrator import CoinCalibrator
 from app.domain.service.finger_length_measurer import FingerLengthMeasurer
 from app.domain.service.finger_measurer import FingerMeasurer
 from app.domain.service.scale_calibrator import ScaleCalibrator
+from app.infrastructure.card_detector import CardDetector
 from app.infrastructure.coin_detector import CoinDetector
 from app.infrastructure.hand_detector import MediaPipeHandDetector
+from app.infrastructure.hand_segmenter import HandSegmenter
 
 FINGER_NAMES = ["index", "middle", "ring", "pinky"]
 
@@ -43,6 +47,9 @@ class AnalyzeHandUsecase:
         calibrator: ScaleCalibrator,
         coin_detector: CoinDetector,
         coin_calibrator: CoinCalibrator,
+        card_detector: CardDetector,
+        card_calibrator: CardCalibrator,
+        segmenter: HandSegmenter,
         measurer: FingerMeasurer,
         length_measurer: FingerLengthMeasurer,
         estimator: CircumferenceEstimator,
@@ -51,6 +58,9 @@ class AnalyzeHandUsecase:
         self._calibrator = calibrator
         self._coin_detector = coin_detector
         self._coin_calibrator = coin_calibrator
+        self._card_detector = card_detector
+        self._card_calibrator = card_calibrator
+        self._segmenter = segmenter
         self._measurer = measurer
         self._length_measurer = length_measurer
         self._estimator = estimator
@@ -67,13 +77,15 @@ class AnalyzeHandUsecase:
         h, w = image.shape[:2]
         scale, method = self._resolve_scale(image, landmarks, calibration_input, w, h)
 
+        mask = self._segmenter.segment(image, landmarks)
+
         fingers: dict[str, FingerResult] = {}
         for finger_name in FINGER_NAMES:
             length_mm = self._length_measurer.measure(
                 landmarks, scale, finger_name, w, h,
             )
             measurement = self._measurer.measure(
-                image, landmarks, scale, finger_name, length_mm,
+                mask, landmarks, scale, finger_name, length_mm,
             )
             ring_size = self._estimator.estimate(measurement)
             fingers[finger_name] = FingerResult(
@@ -112,6 +124,16 @@ class AnalyzeHandUsecase:
             scale = self._coin_calibrator.calibrate(detected)
             return scale, "coin_100_yen"
 
+        if isinstance(calibration_input, CardCalibrationInput):
+            detected_card = self._card_detector.detect(image)
+            if detected_card is None:
+                raise CardNotDetectedError(
+                    "No ID-1 card detected in image. "
+                    "Place a credit/IC card next to your hand."
+                )
+            scale = self._card_calibrator.calibrate(detected_card)
+            return scale, "card_id1"
+
         raise ValueError(f"Unknown calibration input: {type(calibration_input)}")
 
 
@@ -120,4 +142,8 @@ class HandNotDetectedError(Exception):
 
 
 class CoinNotDetectedError(Exception):
+    pass
+
+
+class CardNotDetectedError(Exception):
     pass

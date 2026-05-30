@@ -1,13 +1,16 @@
 from functools import lru_cache
 
 from app.application.analyze_hand_usecase import AnalyzeHandUsecase
+from app.domain.service.card_calibrator import CardCalibrator
 from app.domain.service.circumference_estimator import CircumferenceEstimator
 from app.domain.service.coin_calibrator import CoinCalibrator
 from app.domain.service.finger_length_measurer import FingerLengthMeasurer
 from app.domain.service.finger_measurer import FingerMeasurer
 from app.domain.service.scale_calibrator import ScaleCalibrator
+from app.infrastructure.card_detector import CardDetector
 from app.infrastructure.coin_detector import CoinDetector
 from app.infrastructure.hand_detector import MediaPipeHandDetector
+from app.infrastructure.hand_segmenter import HandSegmenter
 
 
 @lru_cache(maxsize=1)
@@ -17,6 +20,9 @@ def get_analyze_hand_usecase() -> AnalyzeHandUsecase:
         calibrator=ScaleCalibrator(),
         coin_detector=CoinDetector(),
         coin_calibrator=CoinCalibrator(),
+        card_detector=CardDetector(),
+        card_calibrator=CardCalibrator(),
+        segmenter=HandSegmenter(),
         measurer=FingerMeasurer(),
         length_measurer=FingerLengthMeasurer(),
         estimator=CircumferenceEstimator(),
