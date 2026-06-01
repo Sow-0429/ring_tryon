@@ -93,7 +93,7 @@ func TestRingSize_JPSizeRange(t *testing.T) {
 		rs, _ := NewRingSize(41.0) // 1号
 
 		// Act
-		low, high := rs.JPSizeRange()
+		low, _ := rs.JPSizeRange()
 
 		// Assert
 		if low != 1 {
@@ -111,6 +111,43 @@ func TestRingSize_JPSizeRange(t *testing.T) {
 		// Assert
 		if high != 25 {
 			t.Errorf("JPSizeRange() high = %d, want 25", high)
+		}
+	})
+}
+
+func TestCircumferenceForJPSize(t *testing.T) {
+	t.Run("号数から周囲長を逆引きできる", func(t *testing.T) {
+		tests := []struct {
+			name string
+			size int
+			want float64
+		}{
+			{"1号", 1, 41.0},
+			{"10号", 10, 50.5},
+			{"13号", 13, 53.5},
+			{"25号", 25, 66.0},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				// Act
+				got, err := CircumferenceForJPSize(tt.size)
+
+				// Assert
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				if got != tt.want {
+					t.Errorf("CircumferenceForJPSize(%d) = %f, want %f", tt.size, got, tt.want)
+				}
+			})
+		}
+	})
+
+	t.Run("範囲外の号数はエラー", func(t *testing.T) {
+		for _, size := range []int{0, -1, 26} {
+			if _, err := CircumferenceForJPSize(size); err == nil {
+				t.Errorf("expected error for size %d", size)
+			}
 		}
 	})
 }

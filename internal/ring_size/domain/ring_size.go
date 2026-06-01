@@ -16,6 +16,18 @@ var jpSizeTable = []struct {
 	{62.0, 21}, {63.0, 22}, {64.0, 23}, {65.0, 24}, {66.0, 25},
 }
 
+// CircumferenceForJPSize は日本の号数(1-25)に対応する基準周囲長(mm)を返す。
+// 較正ループの正解ラベル(actual_ring_size_jp → actual_circumference_mm)生成に使う。
+// 号数表は本パッケージが唯一の真実の源(ADR-0001)。
+func CircumferenceForJPSize(size int) (float64, error) {
+	for _, entry := range jpSizeTable {
+		if entry.size == size {
+			return entry.circumferenceMM, nil
+		}
+	}
+	return 0, errors.New("jp size out of range (1-25)")
+}
+
 // RingSize は指輪サイズを表す値オブジェクト。
 type RingSize struct {
 	circumferenceMM float64
@@ -39,7 +51,8 @@ func (r RingSize) JPSize() int {
 
 	for _, entry := range jpSizeTable[1:] {
 		diff := math.Abs(r.circumferenceMM - entry.circumferenceMM)
-		if diff < minDiff {
+		// 等距離(tie)のときは安全側の大きい号数を採る。表は昇順なので <= で後勝ち。
+		if diff <= minDiff {
 			minDiff = diff
 			closest = entry
 		}

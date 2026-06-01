@@ -57,7 +57,10 @@ class RingSize:
             (56.5, 16), (57.5, 17), (58.5, 18), (60.0, 19), (61.0, 20),
             (62.0, 21), (63.0, 22), (64.0, 23), (65.0, 24), (66.0, 25),
         ]
-        closest = min(jp_table, key=lambda t: abs(t[0] - self.circumference_mm))
+        # 等距離(tie)のときは安全側の大きい号数を採る(Go ring_size と整合)。
+        closest = min(
+            jp_table, key=lambda t: (abs(t[0] - self.circumference_mm), -t[1]),
+        )
         return closest[1]
 
     @property

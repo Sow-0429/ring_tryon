@@ -6,6 +6,8 @@ from app.domain.service.circumference_estimator import CircumferenceEstimator
 from app.domain.service.coin_calibrator import CoinCalibrator
 from app.domain.service.finger_length_measurer import FingerLengthMeasurer
 from app.domain.service.finger_measurer import FingerMeasurer
+from app.domain.service.frame_aggregator import FrameAggregator
+from app.domain.service.quality_gate import QualityGate
 from app.domain.service.scale_calibrator import ScaleCalibrator
 from app.infrastructure.card_detector import CardDetector
 from app.infrastructure.coin_detector import CoinDetector
@@ -22,8 +24,10 @@ def get_analyze_hand_usecase() -> AnalyzeHandUsecase:
         coin_calibrator=CoinCalibrator(),
         card_detector=CardDetector(),
         card_calibrator=CardCalibrator(),
+        quality_gate=QualityGate(),
         segmenter=HandSegmenter(),
         measurer=FingerMeasurer(),
         length_measurer=FingerLengthMeasurer(),
         estimator=CircumferenceEstimator(),
+        aggregator=FrameAggregator(),
     )

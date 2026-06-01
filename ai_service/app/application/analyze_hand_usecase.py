@@ -12,7 +12,15 @@ from app.domain.model.calibration import (
 )
 from app.domain.model.landmark import HandLandmarks
 from app.domain.model.measurement import FingerMeasurement, RingSize, Scale
+from app.domain.model.measurement_session import (
+    AggregatedMeasurement,
+    FingerSummary,
+    FrameMeasurement,
+    MeasurementSession,
+)
 from app.domain.service.card_calibrator import CardCalibrator
+from app.domain.service.frame_aggregator import FrameAggregator, NoValidFramesError
+from app.domain.service.quality_gate import QualityGate
 from app.domain.service.circumference_estimator import CircumferenceEstimator
 from app.domain.service.coin_calibrator import CoinCalibrator
 from app.domain.service.finger_length_measurer import FingerLengthMeasurer
@@ -33,11 +41,42 @@ class FingerResult:
 
 
 @dataclass
+class FrameMeta:
+    calibration_method: str
+    pixels_per_mm: float
+    handedness: str
+    hand_confidence: float
+
+
+@dataclass
+class AnalyzeScanResult:
+    session: MeasurementSession
+    total_frames: int
+    accepted_frames: int
+
+
+@dataclass
 class AnalyzeHandResult:
     landmarks: HandLandmarks
     scale: Scale
     calibration_method: str
     fingers: dict[str, FingerResult]
+
+    def to_session(self) -> MeasurementSession:
+        """較正ループ/永続化用の集約に変換する(永続化は Go 側)。"""
+        return MeasurementSession(
+            calibration_method=self.calibration_method,
+            pixels_per_mm=self.scale.pixels_per_mm,
+            handedness=self.landmarks.handedness,
+            hand_confidence=self.landmarks.confidence,
+            fingers={
+                name: FingerSummary(
+                    measurement=fr.measurement,
+                    circumference_mm=fr.ring_size.circumference_mm,
+                )
+                for name, fr in self.fingers.items()
+            },
+        )
 
 
 class AnalyzeHandUsecase:
@@ -49,10 +88,12 @@ class AnalyzeHandUsecase:
         coin_calibrator: CoinCalibrator,
         card_detector: CardDetector,
         card_calibrator: CardCalibrator,
+        quality_gate: QualityGate,
         segmenter: HandSegmenter,
         measurer: FingerMeasurer,
         length_measurer: FingerLengthMeasurer,
         estimator: CircumferenceEstimator,
+        aggregator: FrameAggregator,
     ) -> None:
         self._detector = detector
         self._calibrator = calibrator
@@ -60,10 +101,12 @@ class AnalyzeHandUsecase:
         self._coin_calibrator = coin_calibrator
         self._card_detector = card_detector
         self._card_calibrator = card_calibrator
+        self._quality_gate = quality_gate
         self._segmenter = segmenter
         self._measurer = measurer
         self._length_measurer = length_measurer
         self._estimator = estimator
+        self._aggregator = aggregator
 
     def execute(
         self,
@@ -74,12 +117,105 @@ class AnalyzeHandUsecase:
         if landmarks is None:
             raise HandNotDetectedError("No hand detected in image")
 
+        assessment = self._quality_gate.evaluate(image, landmarks)
+        if not assessment.is_acceptable:
+            raise LowQualityImageError(assessment.failure_messages)
+
         h, w = image.shape[:2]
         scale, method = self._resolve_scale(image, landmarks, calibration_input, w, h)
 
-        mask = self._segmenter.segment(image, landmarks)
+        summaries = self._measure_fingers(image, landmarks, scale, w, h)
+        fingers = {
+            name: FingerResult(
+                measurement=s.measurement,
+                ring_size=RingSize(circumference_mm=s.circumference_mm),
+            )
+            for name, s in summaries.items()
+        }
 
-        fingers: dict[str, FingerResult] = {}
+        return AnalyzeHandResult(
+            landmarks=landmarks,
+            scale=scale,
+            calibration_method=method,
+            fingers=fingers,
+        )
+
+    def execute_scan(
+        self,
+        images: list[np.ndarray],
+        calibration_input: CalibrationInput,
+    ) -> AnalyzeScanResult:
+        """指スキャンの複数フレームを処理し、中央値集約した結果を返す。
+
+        1 枚も合格フレームが無い場合は LowQualityImageError を送出する。
+        """
+        frames: list[FrameMeasurement] = []
+        metas: list[FrameMeta] = []
+        for image in images:
+            frame, meta = self._analyze_frame(image, calibration_input)
+            frames.append(frame)
+            if frame.accepted and meta is not None:
+                metas.append(meta)
+
+        try:
+            aggregated: AggregatedMeasurement = self._aggregator.aggregate(frames)
+        except NoValidFramesError:
+            raise LowQualityImageError(
+                ["有効なフレームがありません。手を平らに置き、明るい場所で撮り直してください"]
+            )
+
+        meta = metas[0]
+        session = MeasurementSession.from_aggregation(
+            calibration_method=meta.calibration_method,
+            pixels_per_mm=meta.pixels_per_mm,
+            handedness=meta.handedness,
+            hand_confidence=meta.hand_confidence,
+            aggregated=aggregated,
+        )
+        return AnalyzeScanResult(
+            session=session,
+            total_frames=len(images),
+            accepted_frames=aggregated.frame_count,
+        )
+
+    def _analyze_frame(
+        self,
+        image: np.ndarray,
+        calibration_input: CalibrationInput,
+    ) -> tuple[FrameMeasurement, FrameMeta | None]:
+        """1 フレームを解析する。検出/較正/品質で失敗したフレームは accepted=False。"""
+        landmarks = self._detector.detect(image)
+        if landmarks is None:
+            return FrameMeasurement(fingers={}, accepted=False), None
+
+        h, w = image.shape[:2]
+        try:
+            scale, method = self._resolve_scale(
+                image, landmarks, calibration_input, w, h,
+            )
+        except (CoinNotDetectedError, CardNotDetectedError):
+            return FrameMeasurement(fingers={}, accepted=False), None
+
+        accepted = self._quality_gate.evaluate(image, landmarks).is_acceptable
+        summaries = self._measure_fingers(image, landmarks, scale, w, h)
+        meta = FrameMeta(
+            calibration_method=method,
+            pixels_per_mm=scale.pixels_per_mm,
+            handedness=landmarks.handedness,
+            hand_confidence=landmarks.confidence,
+        )
+        return FrameMeasurement(fingers=summaries, accepted=accepted), meta
+
+    def _measure_fingers(
+        self,
+        image: np.ndarray,
+        landmarks: HandLandmarks,
+        scale: Scale,
+        w: int,
+        h: int,
+    ) -> dict[str, FingerSummary]:
+        mask = self._segmenter.segment(image, landmarks)
+        summaries: dict[str, FingerSummary] = {}
         for finger_name in FINGER_NAMES:
             length_mm = self._length_measurer.measure(
                 landmarks, scale, finger_name, w, h,
@@ -88,17 +224,11 @@ class AnalyzeHandUsecase:
                 mask, landmarks, scale, finger_name, length_mm,
             )
             ring_size = self._estimator.estimate(measurement)
-            fingers[finger_name] = FingerResult(
+            summaries[finger_name] = FingerSummary(
                 measurement=measurement,
-                ring_size=ring_size,
+                circumference_mm=ring_size.circumference_mm,
             )
-
-        return AnalyzeHandResult(
-            landmarks=landmarks,
-            scale=scale,
-            calibration_method=method,
-            fingers=fingers,
-        )
+        return summaries
 
     def _resolve_scale(
         self,
@@ -147,3 +277,11 @@ class CoinNotDetectedError(Exception):
 
 class CardNotDetectedError(Exception):
     pass
+
+
+class LowQualityImageError(Exception):
+    """撮影品質が不合格。messages はユーザー向けの実用的な指示の一覧。"""
+
+    def __init__(self, messages: list[str]) -> None:
+        self.messages = messages
+        super().__init__("; ".join(messages) or "Image quality check failed")
