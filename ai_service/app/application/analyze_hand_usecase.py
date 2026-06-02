@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 import numpy as np
 
@@ -11,7 +12,7 @@ from app.domain.model.calibration import (
     FingerCalibrationInput,
 )
 from app.domain.model.landmark import HandLandmarks
-from app.domain.model.measurement import FingerMeasurement, RingSize, Scale
+from app.domain.model.measurement import FingerMeasurement, Scale
 from app.domain.model.measurement_session import (
     AggregatedMeasurement,
     FingerSummary,
@@ -19,9 +20,12 @@ from app.domain.model.measurement_session import (
     MeasurementSession,
 )
 from app.domain.service.card_calibrator import CardCalibrator
+from app.domain.service.circumference_estimator import (
+    TIER_STANDARD,
+    CircumferenceEstimator,
+)
 from app.domain.service.frame_aggregator import FrameAggregator, NoValidFramesError
 from app.domain.service.quality_gate import QualityGate
-from app.domain.service.circumference_estimator import CircumferenceEstimator
 from app.domain.service.coin_calibrator import CoinCalibrator
 from app.domain.service.finger_length_measurer import FingerLengthMeasurer
 from app.domain.service.finger_measurer import FingerMeasurer
@@ -37,7 +41,7 @@ FINGER_NAMES = ["index", "middle", "ring", "pinky"]
 @dataclass
 class FingerResult:
     measurement: FingerMeasurement
-    ring_size: RingSize
+    circumference_mm: float
 
 
 @dataclass
@@ -92,7 +96,7 @@ class AnalyzeHandUsecase:
         segmenter: HandSegmenter,
         measurer: FingerMeasurer,
         length_measurer: FingerLengthMeasurer,
-        estimator: CircumferenceEstimator,
+        estimator_selector: Callable[[str], CircumferenceEstimator],
         aggregator: FrameAggregator,
     ) -> None:
         self._detector = detector
@@ -105,13 +109,14 @@ class AnalyzeHandUsecase:
         self._segmenter = segmenter
         self._measurer = measurer
         self._length_measurer = length_measurer
-        self._estimator = estimator
+        self._select_estimator = estimator_selector
         self._aggregator = aggregator
 
     def execute(
         self,
         image: np.ndarray,
         calibration_input: CalibrationInput,
+        tier: str = TIER_STANDARD,
     ) -> AnalyzeHandResult:
         landmarks = self._detector.detect(image)
         if landmarks is None:
@@ -124,11 +129,12 @@ class AnalyzeHandUsecase:
         h, w = image.shape[:2]
         scale, method = self._resolve_scale(image, landmarks, calibration_input, w, h)
 
-        summaries = self._measure_fingers(image, landmarks, scale, w, h)
+        estimator = self._select_estimator(tier)
+        summaries = self._measure_fingers(image, landmarks, scale, w, h, estimator)
         fingers = {
             name: FingerResult(
                 measurement=s.measurement,
-                ring_size=RingSize(circumference_mm=s.circumference_mm),
+                circumference_mm=s.circumference_mm,
             )
             for name, s in summaries.items()
         }
@@ -149,10 +155,11 @@ class AnalyzeHandUsecase:
 
         1 枚も合格フレームが無い場合は LowQualityImageError を送出する。
         """
+        estimator = self._select_estimator(TIER_STANDARD)
         frames: list[FrameMeasurement] = []
         metas: list[FrameMeta] = []
         for image in images:
-            frame, meta = self._analyze_frame(image, calibration_input)
+            frame, meta = self._analyze_frame(image, calibration_input, estimator)
             frames.append(frame)
             if frame.accepted and meta is not None:
                 metas.append(meta)
@@ -182,6 +189,7 @@ class AnalyzeHandUsecase:
         self,
         image: np.ndarray,
         calibration_input: CalibrationInput,
+        estimator: CircumferenceEstimator,
     ) -> tuple[FrameMeasurement, FrameMeta | None]:
         """1 フレームを解析する。検出/較正/品質で失敗したフレームは accepted=False。"""
         landmarks = self._detector.detect(image)
@@ -197,7 +205,7 @@ class AnalyzeHandUsecase:
             return FrameMeasurement(fingers={}, accepted=False), None
 
         accepted = self._quality_gate.evaluate(image, landmarks).is_acceptable
-        summaries = self._measure_fingers(image, landmarks, scale, w, h)
+        summaries = self._measure_fingers(image, landmarks, scale, w, h, estimator)
         meta = FrameMeta(
             calibration_method=method,
             pixels_per_mm=scale.pixels_per_mm,
@@ -213,6 +221,7 @@ class AnalyzeHandUsecase:
         scale: Scale,
         w: int,
         h: int,
+        estimator: CircumferenceEstimator,
     ) -> dict[str, FingerSummary]:
         mask = self._segmenter.segment(image, landmarks)
         summaries: dict[str, FingerSummary] = {}
@@ -223,10 +232,10 @@ class AnalyzeHandUsecase:
             measurement = self._measurer.measure(
                 mask, landmarks, scale, finger_name, length_mm,
             )
-            ring_size = self._estimator.estimate(measurement)
+            estimate = estimator.estimate(measurement)
             summaries[finger_name] = FingerSummary(
                 measurement=measurement,
-                circumference_mm=ring_size.circumference_mm,
+                circumference_mm=estimate.circumference_mm,
             )
         return summaries
 

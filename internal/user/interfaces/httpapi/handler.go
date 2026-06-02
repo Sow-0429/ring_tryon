@@ -177,7 +177,7 @@ func (h *handler) measureFromImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	u, err := h.measurement.MeasureHandFromImage(
+	result, err := h.measurement.MeasureHandFromImage(
 		r.Context(), id, image, header.Filename, cal,
 	)
 	switch {
@@ -191,7 +191,15 @@ func (h *handler) measureFromImage(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadGateway, "measurement failed: "+err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, toUserResponse(u))
+
+	resp := struct {
+		userResponse
+		RecordID string `json:"record_id"`
+	}{
+		userResponse: toUserResponse(result.User),
+		RecordID:     result.RecordID.String(),
+	}
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // parseCalibration はフォームから較正指定を 1 つだけ読む。複数/ゼロは ok=false。

@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "KIRAKU",
+    "slug": "ring-tryon-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": { "backgroundColor": "#f3ecdd" },
+    "ios": { "supportsTablet": true },
+    "android": {},
+    "plugins": [
+      [
+        "expo-image-picker",
+        { "photosPermission": "手の写真から指の号数を計測するために使用します。" }
+      ]
+    ]
+  }
+}

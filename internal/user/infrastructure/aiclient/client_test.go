@@ -38,17 +38,30 @@ func TestClient_Measure(t *testing.T) {
 		client := NewClient(srv.URL)
 
 		// Act
-		c, err := client.Measure(
+		m, err := client.Measure(
 			context.Background(), []byte("imgdata"), "hand.jpg",
-			application.Calibration{UseCard: true},
+			application.Calibration{UseCard: true}, "standard",
 		)
 
 		// Assert
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if c.Index != 50.5 || c.Middle != 53.5 || c.Ring != 52.5 || c.Pinky != 45.0 {
-			t.Errorf("circumferences = %+v", c)
+		if m.Fingers["index"].CircumferenceMM != 50.5 ||
+			m.Fingers["middle"].CircumferenceMM != 53.5 ||
+			m.Fingers["ring"].CircumferenceMM != 52.5 ||
+			m.Fingers["pinky"].CircumferenceMM != 45.0 {
+			t.Errorf("circumferences = %+v", m.Fingers)
+		}
+		if m.CalibrationMethod != "card_id1" || m.PixelsPerMM != 10.0 {
+			t.Errorf("metadata = %+v", m)
+		}
+		if m.HandConfidence != 0.95 || m.FrameCount != 1 {
+			t.Errorf("hand_confidence/frame_count = %v/%d", m.HandConfidence, m.FrameCount)
+		}
+		// 単発計測なので集約信頼度は nil、号数フィールドは取り込まれない。
+		if m.Confidence != nil {
+			t.Errorf("Confidence should be nil for single frame, got %v", *m.Confidence)
 		}
 		if gotPath != "/api/analyze-hand" {
 			t.Errorf("path = %q", gotPath)
@@ -68,7 +81,7 @@ func TestClient_Measure(t *testing.T) {
 
 		_, err := NewClient(srv.URL).Measure(
 			context.Background(), []byte("x"), "x.jpg",
-			application.Calibration{UseCoin: true},
+			application.Calibration{UseCoin: true}, "standard",
 		)
 		if err == nil {
 			t.Fatal("expected error for non-200 response")

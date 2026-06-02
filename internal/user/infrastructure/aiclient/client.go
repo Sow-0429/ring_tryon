@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"time"
 
+	measurementdomain "github.com/Sow-0429/ring_tryon/internal/measurement/domain"
 	"github.com/Sow-0429/ring_tryon/internal/user/application"
-	userdomain "github.com/Sow-0429/ring_tryon/internal/user/domain"
 )
 
 // Client は ai_service への HTTP クライアント。
@@ -36,6 +36,7 @@ type analyzeResponse struct {
 	PixelsPerMM       float64 `json:"pixels_per_mm"`
 	CalibrationMethod string  `json:"calibration_method"`
 	Handedness        string  `json:"handedness"`
+	Confidence        float64 `json:"confidence"` // 手検出(ランドマーク)の信頼度
 	Fingers           map[string]struct {
 		CircumferenceMM float64 `json:"circumference_mm"`
 		LengthMM        float64 `json:"length_mm"`
@@ -45,16 +46,17 @@ type analyzeResponse struct {
 	} `json:"fingers"`
 }
 
-// Measure は画像を ai_service に送り、各指の周囲長を返す。
+// Measure は画像を ai_service に送り、計測結果(周囲長+特徴量+メタ)を返す。
 func (c *Client) Measure(
 	ctx context.Context,
 	image []byte,
 	filename string,
 	cal application.Calibration,
-) (userdomain.FingerCircumferences, error) {
-	var zero userdomain.FingerCircumferences
+	tier string,
+) (measurementdomain.Measurement, error) {
+	var zero measurementdomain.Measurement
 
-	body, contentType, err := buildMultipart(image, filename, cal)
+	body, contentType, err := buildMultipart(image, filename, cal, tier)
 	if err != nil {
 		return zero, err
 	}
@@ -85,11 +87,11 @@ func (c *Client) Measure(
 		return zero, fmt.Errorf("decode ai_service response: %w", err)
 	}
 
-	return toFingerCircumferences(parsed)
+	return toMeasurement(parsed), nil
 }
 
 func buildMultipart(
-	image []byte, filename string, cal application.Calibration,
+	image []byte, filename string, cal application.Calibration, tier string,
 ) (*bytes.Buffer, string, error) {
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
@@ -100,6 +102,10 @@ func buildMultipart(
 	}
 	if _, err := fw.Write(image); err != nil {
 		return nil, "", err
+	}
+
+	if tier != "" {
+		_ = mw.WriteField("tier", tier)
 	}
 
 	switch {
@@ -120,38 +126,26 @@ func buildMultipart(
 	return &buf, mw.FormDataContentType(), nil
 }
 
-func toFingerCircumferences(
-	r analyzeResponse,
-) (userdomain.FingerCircumferences, error) {
-	get := func(name string) (float64, error) {
-		f, ok := r.Fingers[name]
-		if !ok {
-			return 0, fmt.Errorf("missing finger %q in ai_service response", name)
+func toMeasurement(r analyzeResponse) measurementdomain.Measurement {
+	fingers := make(map[string]measurementdomain.FingerMeasurement, len(r.Fingers))
+	for name, f := range r.Fingers {
+		fingers[name] = measurementdomain.FingerMeasurement{
+			FingerName:      name,
+			LengthMM:        f.LengthMM,
+			BaseWidthMM:     f.BaseWidthMM,
+			PipWidthMM:      f.PipWidthMM,
+			WidthMM:         f.WidthMM,
+			CircumferenceMM: f.CircumferenceMM,
 		}
-		return f.CircumferenceMM, nil
 	}
-
-	index, err := get("index")
-	if err != nil {
-		return userdomain.FingerCircumferences{}, err
+	// 単発計測なのでフレーム集約の信頼度は持たない(nil)。
+	return measurementdomain.Measurement{
+		CalibrationMethod: r.CalibrationMethod,
+		PixelsPerMM:       r.PixelsPerMM,
+		Handedness:        r.Handedness,
+		HandConfidence:    r.Confidence,
+		FrameCount:        1,
+		Confidence:        nil,
+		Fingers:           fingers,
 	}
-	middle, err := get("middle")
-	if err != nil {
-		return userdomain.FingerCircumferences{}, err
-	}
-	ring, err := get("ring")
-	if err != nil {
-		return userdomain.FingerCircumferences{}, err
-	}
-	pinky, err := get("pinky")
-	if err != nil {
-		return userdomain.FingerCircumferences{}, err
-	}
-
-	return userdomain.FingerCircumferences{
-		Index:  index,
-		Middle: middle,
-		Ring:   ring,
-		Pinky:  pinky,
-	}, nil
 }

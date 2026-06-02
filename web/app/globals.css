@@ -1,0 +1,223 @@
+:root {
+  --cream-0: #faf6ee;
+  --cream-1: #f3ecdd;
+  --cream-2: #e9dec8;
+  --ink: #2b2620;
+  --ink-soft: #6f6558;
+  --gold: #b9975b;
+  --gold-deep: #9c7c43;
+  --glass-bg: rgba(255, 255, 255, 0.42);
+  --glass-bg-strong: rgba(255, 255, 255, 0.62);
+  --glass-border: rgba(255, 255, 255, 0.7);
+  --glass-shadow: 0 8px 40px rgba(120, 96, 56, 0.18);
+  --radius: 22px;
+  --serif: "Hiragino Mincho ProN", "Yu Mincho", "YuMincho", "Noto Serif JP",
+    Georgia, serif;
+  --sans: "Hiragino Sans", "Yu Gothic", "Noto Sans JP", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--sans);
+  color: var(--ink);
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 600px at 12% -8%, #fffdf8 0%, rgba(255, 253, 248, 0) 60%),
+    radial-gradient(1000px 700px at 100% 0%, #f7eede 0%, rgba(247, 238, 222, 0) 55%),
+    radial-gradient(900px 900px at 50% 120%, #efe3cd 0%, rgba(239, 227, 205, 0) 60%),
+    linear-gradient(160deg, var(--cream-0), var(--cream-2));
+  background-attachment: fixed;
+}
+
+/* 浮遊する光のオーブ(リキッドグラスの被写界) */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(60px);
+  z-index: -1;
+  opacity: 0.55;
+  pointer-events: none;
+}
+body::before {
+  width: 420px;
+  height: 420px;
+  top: -120px;
+  left: -80px;
+  background: radial-gradient(circle, rgba(201, 169, 106, 0.55), transparent 70%);
+}
+body::after {
+  width: 520px;
+  height: 520px;
+  bottom: -160px;
+  right: -120px;
+  background: radial-gradient(circle, rgba(231, 212, 175, 0.6), transparent 70%);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--serif);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+
+.container {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.muted {
+  color: var(--ink-soft);
+}
+
+/* ===== リキッドグラス ===== */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: var(--glass-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  position: relative;
+  overflow: hidden;
+}
+/* 上端のガラスハイライト */
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 38%;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.55),
+    rgba(255, 255, 255, 0)
+  );
+  pointer-events: none;
+}
+.glass-strong {
+  background: var(--glass-bg-strong);
+}
+
+.card {
+  padding: 24px;
+}
+
+/* ===== ナビ ===== */
+.nav {
+  position: sticky;
+  top: 16px;
+  z-index: 50;
+  margin: 16px auto 0;
+  max-width: 1040px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 22px;
+}
+.brand {
+  font-family: var(--serif);
+  font-size: 20px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+}
+.brand small {
+  display: block;
+  font-family: var(--sans);
+  font-size: 9px;
+  letter-spacing: 0.42em;
+  color: var(--gold-deep);
+}
+.nav-links {
+  display: flex;
+  gap: 22px;
+  font-size: 14px;
+}
+.nav-links a {
+  padding: 6px 4px;
+  border-bottom: 1.5px solid transparent;
+  transition: border-color 0.2s, color 0.2s;
+}
+.nav-links a:hover {
+  color: var(--gold-deep);
+  border-color: var(--gold);
+}
+
+/* ===== ボタン ===== */
+.btn {
+  font-family: var(--sans);
+  font-size: 14px;
+  padding: 11px 20px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(10px);
+  color: var(--ink);
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.2s, background 0.2s;
+}
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: linear-gradient(135deg, var(--gold), var(--gold-deep));
+  border: none;
+  color: #fffdf8;
+  box-shadow: 0 6px 20px rgba(156, 124, 67, 0.35);
+  letter-spacing: 0.04em;
+}
+
+.field {
+  font-family: var(--sans);
+  font-size: 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(176, 152, 110, 0.4);
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--ink);
+}
+.field:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+.pill {
+  display: inline-block;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(185, 151, 91, 0.16);
+  color: var(--gold-deep);
+  border: 1px solid rgba(185, 151, 91, 0.3);
+}
+
+.error {
+  border: 1px solid rgba(176, 58, 46, 0.5);
+  background: rgba(214, 122, 110, 0.12);
+  color: #9b3b30;
+  border-radius: 14px;
+  padding: 12px 16px;
+}

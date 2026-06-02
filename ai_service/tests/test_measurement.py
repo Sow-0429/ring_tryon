@@ -1,6 +1,10 @@
 import pytest
 
-from app.domain.model.measurement import FingerMeasurement, RingSize, Scale
+from app.domain.model.measurement import (
+    CircumferenceEstimate,
+    FingerMeasurement,
+    Scale,
+)
 
 
 class TestScale:
@@ -19,35 +23,11 @@ class TestScale:
             Scale(pixels_per_mm=-1.0)
 
 
-class TestRingSize:
-    def test_jp_size_mapping(self):
-        # 周囲長41mmは日本サイズ1号
-        rs = RingSize(circumference_mm=41.0)
-        assert rs.jp_size == 1
-
-    def test_jp_size_closest_match(self):
-        # 51.0mmは10号(50.5)か11号(51.5)のどちらかに近い
-        rs = RingSize(circumference_mm=51.0)
-        assert rs.jp_size in (10, 11)
-
-    def test_jp_size_range(self):
-        rs = RingSize(circumference_mm=50.5)
-        low, high = rs.jp_size_range
-        assert low == 9
-        assert high == 11
-
-    def test_jp_size_range_boundary(self):
-        rs = RingSize(circumference_mm=41.0)  # 1号
-        low, high = rs.jp_size_range
-        assert low == 1  # 最小値でクランプ
-
-    def test_us_size(self):
-        rs = RingSize(circumference_mm=49.3)
-        assert rs.us_size == pytest.approx(5.0, abs=0.2)
-
-    def test_eu_size(self):
-        rs = RingSize(circumference_mm=49.3)
-        assert rs.eu_size == 49
+class TestCircumferenceEstimate:
+    def test_holds_circumference(self):
+        # 号数化(JP/US/EU)は Go の責務(ADR-0001)。Python は周囲長のみ持つ。
+        est = CircumferenceEstimate(circumference_mm=50.5)
+        assert est.circumference_mm == 50.5
 
 
 class TestFingerMeasurement:

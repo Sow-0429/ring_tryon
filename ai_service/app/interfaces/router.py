@@ -1,7 +1,15 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
 from pydantic import BaseModel
+
+import os
+
+from app.domain.service.tryon_compositor import RingAppearance, RingPlacement
+from app.domain.service.tryon_generator import (
+    GeneratorUnavailableError,
+    generator_for_mode,
+)
 
 from app.application.analyze_hand_usecase import (
     AnalyzeHandUsecase,
@@ -16,7 +24,10 @@ from app.domain.model.calibration import (
     CoinCalibrationInput,
     FingerCalibrationInput,
 )
-from app.domain.model.measurement import RingSize
+from app.domain.service.circumference_estimator import (
+    TIER_STANDARD,
+    DepthDataRequiredError,
+)
 from app.interfaces.dependencies import get_analyze_hand_usecase
 from app.interfaces.image_converter import decode_upload_image
 
@@ -45,15 +56,12 @@ def _build_calibration_input(
 
 
 class FingerSizeResponse(BaseModel):
+    # 号数化(JP/US/EU)は Go が唯一の真実の源(ADR-0001)。ここでは周囲長まで返す。
     length_mm: float
     width_mm: float
     base_width_mm: float
     pip_width_mm: float
     circumference_mm: float
-    ring_size_jp: int
-    ring_size_jp_range: tuple[int, int]
-    ring_size_us: float
-    ring_size_eu: int
     ring_position_x: float
     ring_position_y: float
     finger_angle_deg: float
@@ -73,6 +81,7 @@ async def analyze_hand(
     middle_finger_length_mm: float | None = Form(None),
     use_coin: bool = Form(False),
     use_card: bool = Form(False),
+    tier: str = Form(TIER_STANDARD),
 ) -> AnalyzeHandResponse:
     calibration_input = _build_calibration_input(
         middle_finger_length_mm, use_coin, use_card,
@@ -82,7 +91,7 @@ async def analyze_hand(
     usecase = get_analyze_hand_usecase()
 
     try:
-        result = usecase.execute(img, calibration_input)
+        result = usecase.execute(img, calibration_input, tier=tier)
     except HandNotDetectedError:
         raise HTTPException(status_code=422, detail="No hand detected in image")
     except LowQualityImageError as e:
@@ -103,6 +112,14 @@ async def analyze_hand(
             status_code=422,
             detail="No card detected. Place a credit/IC card next to your hand.",
         )
+    except DepthDataRequiredError:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "premium tier requires depth capture (LiDAR/TrueDepth), "
+                "which is not available for 2D image input"
+            ),
+        )
 
     fingers = {}
     for name, finger in result.fingers.items():
@@ -111,11 +128,7 @@ async def analyze_hand(
             width_mm=round(finger.measurement.width_mm, 2),
             base_width_mm=round(finger.measurement.base_width_mm, 2),
             pip_width_mm=round(finger.measurement.pip_width_mm, 2),
-            circumference_mm=round(finger.ring_size.circumference_mm, 2),
-            ring_size_jp=finger.ring_size.jp_size,
-            ring_size_jp_range=finger.ring_size.jp_size_range,
-            ring_size_us=finger.ring_size.us_size,
-            ring_size_eu=finger.ring_size.eu_size,
+            circumference_mm=round(finger.circumference_mm, 2),
             ring_position_x=round(finger.measurement.ring_position_x, 1),
             ring_position_y=round(finger.measurement.ring_position_y, 1),
             finger_angle_deg=round(finger.measurement.finger_angle_deg, 1),
@@ -131,15 +144,12 @@ async def analyze_hand(
 
 
 class ScanFingerResponse(BaseModel):
+    # 号数化は Go(ADR-0001)。周囲長と回帰特徴量まで返す。
     length_mm: float
     base_width_mm: float
     pip_width_mm: float
     width_mm: float
     circumference_mm: float
-    ring_size_jp: int
-    ring_size_jp_range: tuple[int, int]
-    ring_size_us: float
-    ring_size_eu: int
 
 
 class ConfidenceResponse(BaseModel):
@@ -185,17 +195,12 @@ async def analyze_hand_scan(
     session = result.session
     fingers = {}
     for name, summary in session.fingers.items():
-        ring_size = RingSize(circumference_mm=summary.circumference_mm)
         fingers[name] = ScanFingerResponse(
             length_mm=round(summary.measurement.length_mm, 2),
             base_width_mm=round(summary.measurement.base_width_mm, 2),
             pip_width_mm=round(summary.measurement.pip_width_mm, 2),
             width_mm=round(summary.measurement.width_mm, 2),
             circumference_mm=round(summary.circumference_mm, 2),
-            ring_size_jp=ring_size.jp_size,
-            ring_size_jp_range=ring_size.jp_size_range,
-            ring_size_us=ring_size.us_size,
-            ring_size_eu=ring_size.eu_size,
         )
 
     confidence = None
@@ -216,3 +221,37 @@ async def analyze_hand_scan(
         confidence=confidence,
         fingers=fingers,
     )
+
+
+@router.post("/api/generate-tryon")
+async def generate_tryon(
+    image: UploadFile = File(...),
+    center_x: float = Form(0.5),
+    center_y: float = Form(0.55),
+    width_ratio: float = Form(0.25),
+    angle_deg: float = Form(0.0),
+    metal: str = Form("#b9975b"),
+    metal_dark: str = Form("#9c7c43"),
+    gem: str = Form("#fff6e0"),
+    mode: str = Form("composite"),
+) -> Response:
+    """手画像にリングを合成/生成した PNG を返す。
+
+    mode=composite は決定的合成(Pillow)、photoreal は外部拡散サービスに委譲する。
+    """
+    raw = await image.read()
+    generator = generator_for_mode(mode, os.environ.get("DIFFUSION_API_URL", ""))
+    try:
+        png = generator.generate(
+            raw,
+            RingPlacement(
+                center_x=center_x,
+                center_y=center_y,
+                width_ratio=width_ratio,
+                angle_deg=angle_deg,
+            ),
+            RingAppearance(metal=metal, metal_dark=metal_dark, gem=gem),
+        )
+    except GeneratorUnavailableError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    return Response(content=png, media_type="image/png")

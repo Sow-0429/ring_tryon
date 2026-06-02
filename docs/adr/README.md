@@ -24,3 +24,6 @@ ring_tryon の主要なアーキテクチャ判断を記録する。1ファイ�
 | [0003](0003-measurement-signal-segmentation.md) | 計測信号＝手セグメンテーションマスク＋付け根/PIP最大円周 | Accepted |
 | [0004](0004-accuracy-strategy-calibration-loop.md) | 精度戦略＝正解データ較正ループ＋レンジ提示UX | Accepted |
 | [0005](0005-capture-multiframe-and-depth-tier.md) | 撮影方式＝マルチフレーム標準ティア＋深度プレミアムティア | Accepted |
+| [0006](0006-persistence-and-migrations.md) | 永続化とマイグレーション（PostgreSQL/golang-migrate/UUID） | Accepted |
+| [0007](0007-dto-contract-and-calibration-loop.md) | Python↔Go の DTO 契約と較正ループの運用 | Accepted |
+| [0008](0008-depth-tier-and-billing.md) | 深度ティアと課金判定の配置 | Accepted |
