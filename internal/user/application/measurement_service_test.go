@@ -55,7 +55,7 @@ type fakeMeasurer struct {
 }
 
 func (m fakeMeasurer) Measure(
-	_ context.Context, _ []byte, _ string, _ Calibration, _ string,
+	_ context.Context, _ []byte, _ string, _ Calibration, _ string, _ *float64,
 ) (measurementdomain.Measurement, error) {
 	return m.result, m.err
 }
@@ -118,7 +118,7 @@ func TestMeasurementService_MeasureHandFromImage(t *testing.T) {
 
 		// Act
 		got, err := svc.MeasureHandFromImage(
-			context.Background(), u.UserID, []byte("img"), "hand.jpg", Calibration{UseCard: true},
+			context.Background(), u.UserID, []byte("img"), "hand.jpg", Calibration{UseCard: true}, nil,
 		)
 
 		// Assert
@@ -145,7 +145,7 @@ func TestMeasurementService_MeasureHandFromImage(t *testing.T) {
 		svc := NewMeasurementService(fakeMeasurer{}, repo, &fakeRecordRepo{}, billingapp.NewStaticEntitlementPolicy())
 
 		_, err := svc.MeasureHandFromImage(
-			context.Background(), uuid.New(), []byte("img"), "x.jpg", Calibration{},
+			context.Background(), uuid.New(), []byte("img"), "x.jpg", Calibration{}, nil,
 		)
 		if !errors.Is(err, userdomain.ErrNotFound) {
 			t.Errorf("err = %v, want ErrNotFound", err)
@@ -161,7 +161,7 @@ func TestMeasurementService_MeasureHandFromImage(t *testing.T) {
 		svc := NewMeasurementService(measurer, repo, records, billingapp.NewStaticEntitlementPolicy())
 
 		_, err := svc.MeasureHandFromImage(
-			context.Background(), u.UserID, []byte("img"), "x.jpg", Calibration{UseCoin: true},
+			context.Background(), u.UserID, []byte("img"), "x.jpg", Calibration{UseCoin: true}, nil,
 		)
 		if err == nil {
 			t.Fatal("expected error")

@@ -30,6 +30,7 @@ export default function SizingPage() {
   const [file, setFile] = useState<File | null>(null);
   const [calKind, setCalKind] = useState<CalKind>("card");
   const [middleLen, setMiddleLen] = useState("75");
+  const [depthMm, setDepthMm] = useState("");
 
   const [result, setResult] = useState<MeasureResult | null>(null);
   const [actualFinger, setActualFinger] = useState<FingerName>("ring");
@@ -71,7 +72,8 @@ export default function SizingPage() {
         : calKind === "coin"
           ? { kind: "coin" }
           : { kind: "finger", middleFingerLengthMm: Number(middleLen) };
-    run(() => measure(userId, file, calibration, file.name), setResult);
+    const depth = depthMm ? Number(depthMm) : undefined;
+    run(() => measure(userId, file, calibration, { filename: file.name, depthMm: depth }), setResult);
   }
 
   function onSubmitActual() {
@@ -150,6 +152,18 @@ export default function SizingPage() {
             {busy ? "計測中…" : "計測する"}
           </button>
         </div>
+        <label className="muted" style={{ fontSize: 12, display: "block", marginTop: 12 }}>
+          指の厚み実測 mm（任意・プレミアム/深度センサ。入力すると深度ベース推定を使用）
+          <input
+            className="field"
+            style={{ width: 110, display: "block", marginTop: 4 }}
+            type="number"
+            placeholder="例: 14.5"
+            value={depthMm}
+            onChange={(e) => setDepthMm(e.target.value)}
+            disabled={busy}
+          />
+        </label>
       </section>
 
       {result && (

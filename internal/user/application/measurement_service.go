@@ -28,6 +28,7 @@ type HandMeasurer interface {
 		filename string,
 		cal Calibration,
 		tier string,
+		depthMM *float64,
 	) (measurementdomain.Measurement, error)
 }
 
@@ -67,6 +68,7 @@ func (s *MeasurementService) MeasureHandFromImage(
 	image []byte,
 	filename string,
 	cal Calibration,
+	depthMM *float64,
 ) (MeasureResult, error) {
 	u, err := s.users.FindByID(ctx, userID)
 	if err != nil {
@@ -74,7 +76,7 @@ func (s *MeasurementService) MeasureHandFromImage(
 	}
 
 	tier := s.entitlements.TierFor(ctx, userID)
-	m, err := s.measurer.Measure(ctx, image, filename, cal, tier.String())
+	m, err := s.measurer.Measure(ctx, image, filename, cal, tier.String(), depthMM)
 	if err != nil {
 		return MeasureResult{}, err
 	}

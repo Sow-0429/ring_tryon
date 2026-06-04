@@ -40,7 +40,7 @@ func TestClient_Measure(t *testing.T) {
 		// Act
 		m, err := client.Measure(
 			context.Background(), []byte("imgdata"), "hand.jpg",
-			application.Calibration{UseCard: true}, "standard",
+			application.Calibration{UseCard: true}, "standard", nil,
 		)
 
 		// Assert
@@ -81,7 +81,7 @@ func TestClient_Measure(t *testing.T) {
 
 		_, err := NewClient(srv.URL).Measure(
 			context.Background(), []byte("x"), "x.jpg",
-			application.Calibration{UseCoin: true}, "standard",
+			application.Calibration{UseCoin: true}, "standard", nil,
 		)
 		if err == nil {
 			t.Fatal("expected error for non-200 response")

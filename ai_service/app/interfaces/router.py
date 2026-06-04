@@ -82,6 +82,7 @@ async def analyze_hand(
     use_coin: bool = Form(False),
     use_card: bool = Form(False),
     tier: str = Form(TIER_STANDARD),
+    depth_mm: float | None = Form(None),
 ) -> AnalyzeHandResponse:
     calibration_input = _build_calibration_input(
         middle_finger_length_mm, use_coin, use_card,
@@ -91,7 +92,7 @@ async def analyze_hand(
     usecase = get_analyze_hand_usecase()
 
     try:
-        result = usecase.execute(img, calibration_input, tier=tier)
+        result = usecase.execute(img, calibration_input, tier=tier, depth_mm=depth_mm)
     except HandNotDetectedError:
         raise HTTPException(status_code=422, detail="No hand detected in image")
     except LowQualityImageError as e:

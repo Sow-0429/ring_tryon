@@ -53,10 +53,11 @@ func (c *Client) Measure(
 	filename string,
 	cal application.Calibration,
 	tier string,
+	depthMM *float64,
 ) (measurementdomain.Measurement, error) {
 	var zero measurementdomain.Measurement
 
-	body, contentType, err := buildMultipart(image, filename, cal, tier)
+	body, contentType, err := buildMultipart(image, filename, cal, tier, depthMM)
 	if err != nil {
 		return zero, err
 	}
@@ -91,7 +92,7 @@ func (c *Client) Measure(
 }
 
 func buildMultipart(
-	image []byte, filename string, cal application.Calibration, tier string,
+	image []byte, filename string, cal application.Calibration, tier string, depthMM *float64,
 ) (*bytes.Buffer, string, error) {
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
@@ -106,6 +107,9 @@ func buildMultipart(
 
 	if tier != "" {
 		_ = mw.WriteField("tier", tier)
+	}
+	if depthMM != nil {
+		_ = mw.WriteField("depth_mm", strconv.FormatFloat(*depthMM, 'f', -1, 64))
 	}
 
 	switch {

@@ -177,8 +177,15 @@ func (h *handler) measureFromImage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var depthMM *float64
+	if v := r.FormValue("depth_mm"); v != "" {
+		if f, perr := strconv.ParseFloat(v, 64); perr == nil && f > 0 {
+			depthMM = &f
+		}
+	}
+
 	result, err := h.measurement.MeasureHandFromImage(
-		r.Context(), id, image, header.Filename, cal,
+		r.Context(), id, image, header.Filename, cal, depthMM,
 	)
 	switch {
 	case errors.Is(err, userdomain.ErrNotFound):

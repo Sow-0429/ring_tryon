@@ -19,6 +19,7 @@ export default function GeneratePage() {
   const [pos, setPos] = useState({ x: 50, y: 55 });
   const [ringWidth, setRingWidth] = useState(120);
   const [angle, setAngle] = useState(0);
+  const [mode, setMode] = useState<GenerateMode>("composite");
 
   function onFile(f: File | null) {
     setResult(null);
@@ -46,6 +47,7 @@ export default function GeneratePage() {
       file,
       { centerX: pos.x / 100, centerY: pos.y / 100, widthRatio, angleDeg: angle },
       { metal: ring.metal, metalDark: ring.metalDark, gem: ring.gem },
+      mode,
       file.name,
     )
       .then(setResult)
@@ -132,9 +134,21 @@ export default function GeneratePage() {
               style={{ display: "block", width: "100%", marginTop: 6, accentColor: "var(--gold-deep)" }}
             />
           </label>
+          <label
+            style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14, fontSize: 13 }}
+            className="muted"
+          >
+            <input
+              type="checkbox"
+              checked={mode === "photoreal"}
+              onChange={(e) => setMode(e.target.checked ? "photoreal" : "composite")}
+              style={{ accentColor: "var(--gold-deep)" }}
+            />
+            フォトリアル生成（β・拡散モデル / 要 DIFFUSION_API_URL）
+          </label>
           <div style={{ display: "flex", gap: 12, marginTop: 16 }}>
             <button className="btn btn-primary" onClick={onGenerate} disabled={busy}>
-              {busy ? "生成中…" : "サーバで生成"}
+              {busy ? "生成中…" : mode === "photoreal" ? "フォトリアル生成" : "サーバで合成"}
             </button>
             {result && (
               <a className="btn" href={result} download="ring-tryon.png">

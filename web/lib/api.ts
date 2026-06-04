@@ -112,17 +112,21 @@ export async function getUser(userId: string): Promise<User> {
   return res.json();
 }
 
+export type MeasureOptions = { depthMm?: number; filename?: string };
+
 export async function measure(
   userId: string,
   image: Blob,
   calibration: Calibration,
-  filename = "hand.jpg",
+  opts: MeasureOptions = {},
 ): Promise<MeasureResult> {
   const form = new FormData();
-  form.append("image", image, filename);
+  form.append("image", image, opts.filename ?? "hand.jpg");
   if (calibration.kind === "card") form.append("use_card", "true");
   else if (calibration.kind === "coin") form.append("use_coin", "true");
   else form.append("middle_finger_length_mm", String(calibration.middleFingerLengthMm));
+  // 深度(指の厚み mm)実測があれば深度ベース推定(プレミアム)を使う。
+  if (opts.depthMm && opts.depthMm > 0) form.append("depth_mm", String(opts.depthMm));
 
   const res = await fetch(`${BASE_URL}/api/users/${userId}/measure`, {
     method: "POST",

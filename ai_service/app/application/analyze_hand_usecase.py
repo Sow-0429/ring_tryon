@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from dataclasses import replace as dataclass_replace
 from typing import Callable
 
 import numpy as np
@@ -23,6 +24,7 @@ from app.domain.service.card_calibrator import CardCalibrator
 from app.domain.service.circumference_estimator import (
     TIER_STANDARD,
     CircumferenceEstimator,
+    DepthBasedCircumferenceEstimator,
 )
 from app.domain.service.frame_aggregator import FrameAggregator, NoValidFramesError
 from app.domain.service.quality_gate import QualityGate
@@ -117,6 +119,7 @@ class AnalyzeHandUsecase:
         image: np.ndarray,
         calibration_input: CalibrationInput,
         tier: str = TIER_STANDARD,
+        depth_mm: float | None = None,
     ) -> AnalyzeHandResult:
         landmarks = self._detector.detect(image)
         if landmarks is None:
@@ -129,8 +132,14 @@ class AnalyzeHandUsecase:
         h, w = image.shape[:2]
         scale, method = self._resolve_scale(image, landmarks, calibration_input, w, h)
 
-        estimator = self._select_estimator(tier)
-        summaries = self._measure_fingers(image, landmarks, scale, w, h, estimator)
+        # 深度実測が与えられた場合は固定比を排した深度ベース推定を使う。
+        if depth_mm is not None and depth_mm > 0:
+            estimator: CircumferenceEstimator = DepthBasedCircumferenceEstimator()
+        else:
+            estimator = self._select_estimator(tier)
+        summaries = self._measure_fingers(
+            image, landmarks, scale, w, h, estimator, depth_mm,
+        )
         fingers = {
             name: FingerResult(
                 measurement=s.measurement,
@@ -222,6 +231,7 @@ class AnalyzeHandUsecase:
         w: int,
         h: int,
         estimator: CircumferenceEstimator,
+        depth_mm: float | None = None,
     ) -> dict[str, FingerSummary]:
         mask = self._segmenter.segment(image, landmarks)
         summaries: dict[str, FingerSummary] = {}
@@ -232,6 +242,8 @@ class AnalyzeHandUsecase:
             measurement = self._measurer.measure(
                 mask, landmarks, scale, finger_name, length_mm,
             )
+            if depth_mm is not None and depth_mm > 0:
+                measurement = dataclass_replace(measurement, depth_mm=depth_mm)
             estimate = estimator.estimate(measurement)
             summaries[finger_name] = FingerSummary(
                 measurement=measurement,
